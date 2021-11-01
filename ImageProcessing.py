@@ -44,12 +44,8 @@ class Main:
     self.currentMode.pack()
 
     # Initialize Histogram Figures
-    self.redFigure = plt.Figure(figsize=(3,3), dpi=100)
-    self.redCanvas = FigureCanvasTkAgg(self.redFigure, self.root)
-    self.greenFigure = plt.Figure(figsize=(3,3), dpi=100)
-    self.greenCanvas = FigureCanvasTkAgg(self.greenFigure, self.root)
-    self.blueFigure = plt.Figure(figsize=(3,3), dpi=100)
-    self.blueCanvas = FigureCanvasTkAgg(self.blueFigure, self.root)
+    self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
+    self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
 
     # Set up needed action menus
     self.menubar = Menu(self.root)
@@ -71,9 +67,16 @@ class Main:
     self.menu2.add_command(label="Increase Intensity", command=self.modifyIntensity)
 
     self.menu3 = Menu(self.menubar)
-    self.menubar.add_cascade(label="View Mode", menu=self.menu3)
-    self.menu3.add_command(label="Standard Image", command=self.toImgMode)
-    self.menu3.add_command(label="Image Histogram", command=self.toHistMode)
+    self.menubar.add_cascade(label="Histogram & Filter", menu=self.menu3)
+    self.menu3.add_command(label="Histogram Equalization", command=self.histEqualization)
+    self.menu3.add_command(label="Low Pass Filter", command=self.lowPassFilter)
+    self.menu3.add_command(label="High Pass Filter", command=self.highPassFilter)
+    self.menu3.add_command(label="Band Pass Filter", command=self.bandPassFilter)
+
+    self.menu4 = Menu(self.menubar)
+    self.menubar.add_cascade(label="View Mode", menu=self.menu4)
+    self.menu4.add_command(label="Standard Image", command=self.toImgMode)
+    self.menu4.add_command(label="Image Histogram", command=self.toHistMode)
 
     self.root.config(menu=self.menubar)
     self.root.mainloop()
@@ -120,9 +123,7 @@ class Main:
     self.panelRight.configure(image='')
   
   def unpackHistogramCanvas(self):
-    self.redCanvas.get_tk_widget().pack_forget()
-    self.greenCanvas.get_tk_widget().pack_forget()
-    self.blueCanvas.get_tk_widget().pack_forget()
+    self.histCanvas.get_tk_widget().pack_forget()
 
   # Handle view mode changes
   def toImgMode(self):
@@ -262,6 +263,8 @@ class Main:
       self.showHistogramCanvas()
 
   def modifyIntensity(self, value=100):
+    self.clearRightPanel()
+
     hsv = cv.cvtColor(self.img, cv.COLOR_RGB2HSV)
     h, s, v = cv.split(hsv)
 
@@ -286,33 +289,139 @@ class Main:
       self.clearLeftPanel()
       self.showLeftPanel(image_tk)
       self.showHistogramCanvas()
+    
+  def histEqualization(self):
+    self.clearRightPanel()
+
+    colorChannel = cv.split(self.img)
+    equalizedChannel = []
+    for ch, color in zip(colorChannel, ['R', 'G', 'B']):
+        equalizedChannel.append(cv.equalizeHist(ch))
+
+    equalizedImg = cv.merge(equalizedChannel)
+
+    equalizedImg = Image.fromarray(equalizedImg)
+    self.img = np.array(equalizedImg)
+    if(self.viewMode==0):
+      equalizedImg.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
+    elif(self.viewMode==1):
+      equalizedImg.thumbnail(self.imgPanelSizeHist, Image.ANTIALIAS)
+    image_tk = ImageTk.PhotoImage(equalizedImg)
+
+    if(self.viewMode==0):
+      self.showRightPanel(image_tk)
+    elif(self.viewMode==1):
+      self.clearLeftPanel()
+      self.showLeftPanel(image_tk)
+      self.showHistogramCanvas()
+    
+  def lowPassFilter (self):
+    self.clearRightPanel()
+
+    kernel = np.array([
+      [1/9,1/9,1/9],
+      [1/9,1/9,1/9],
+      [1/9,1/9,1/9]])
+    
+    lowpassImg = cv.filter2D(self.img, -1, kernel)
+
+    lowpassImg = Image.fromarray(lowpassImg)
+    self.img = np.array(lowpassImg)
+    if(self.viewMode==0):
+      lowpassImg.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
+    elif(self.viewMode==1):
+      lowpassImg.thumbnail(self.imgPanelSizeHist, Image.ANTIALIAS)
+    image_tk = ImageTk.PhotoImage(lowpassImg)
+
+    if(self.viewMode==0):
+      self.showRightPanel(image_tk)
+    elif(self.viewMode==1):
+      self.clearLeftPanel()
+      self.showLeftPanel(image_tk)
+      self.showHistogramCanvas()
+
+  def highPassFilter (self):
+    self.clearRightPanel()
+
+    kernel = np.array([
+      [0, -1, 0], 
+      [-1, 4, -1],
+      [0, -1, 0]])
+
+    if (np.sum(kernel)!=0):
+      kernel = kernel/(np.sum(kernel))
+    else: 1
+    highpassImg = cv.filter2D(self.img, -1, kernel)
+
+    highpassImg = Image.fromarray(highpassImg)
+    self.img = np.array(highpassImg)
+    if(self.viewMode==0):
+      highpassImg.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
+    elif(self.viewMode==1):
+      highpassImg.thumbnail(self.imgPanelSizeHist, Image.ANTIALIAS)
+    image_tk = ImageTk.PhotoImage(highpassImg)
+
+    if(self.viewMode==0):
+      self.showRightPanel(image_tk)
+    elif(self.viewMode==1):
+      self.clearLeftPanel()
+      self.showLeftPanel(image_tk)
+      self.showHistogramCanvas()
+
+  def bandPassFilter (self):
+    self.clearRightPanel()
+
+    kernel = np.array([
+      [0, -1, 0], 
+      [-1, 5, -1],
+      [0, -1, 0]])
+
+    if (np.sum(kernel)!=0):
+      kernel = kernel/(np.sum(kernel))
+    else: 1
+    bandpassImg = cv.filter2D(self.img, -1, kernel)
+
+    bandpassImg = Image.fromarray(bandpassImg)
+    self.img = np.array(bandpassImg)
+    if(self.viewMode==0):
+      bandpassImg.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
+    elif(self.viewMode==1):
+      bandpassImg.thumbnail(self.imgPanelSizeHist, Image.ANTIALIAS)
+    image_tk = ImageTk.PhotoImage(bandpassImg)
+
+    if(self.viewMode==0):
+      self.showRightPanel(image_tk)
+    elif(self.viewMode==1):
+      self.clearLeftPanel()
+      self.showLeftPanel(image_tk)
+      self.showHistogramCanvas()
 
   ################# Image Histogram #################
   def showHistogramCanvas(self):
     self.clearRightPanel()
     self.unpackHistogramCanvas()
 
-    self.redFigure = plt.Figure(figsize=(3,3), dpi=100)
-    self.greenFigure = plt.Figure(figsize=(3,3), dpi=100)
-    self.blueFigure = plt.Figure(figsize=(3,3), dpi=100)
+    self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
     
     # Red Channel Histogram
-    self.redFigure.add_subplot(111).plot(cv.calcHist([self.img],[0],None,[256],[0,256]), color = "red")
-    self.redFigure.suptitle("Red Channel")
-    self.redCanvas = FigureCanvasTkAgg(self.redFigure, self.root)
-    self.redCanvas.get_tk_widget().pack(side="top")  
+    redChannel = self.histFigure.add_subplot(221)
+    redChannel.plot(cv.calcHist([self.img],[0],None,[256],[0,256]), color = "red")
+    redChannel.title.set_text("Red Channel")
 
     # Green Channel Histogram
-    self.greenFigure.add_subplot(111).plot(cv.calcHist([self.img],[1],None,[256],[0,256]), color = "green")
-    self.greenFigure.suptitle("Green Channel")
-    self.greenCanvas = FigureCanvasTkAgg(self.greenFigure, self.root)
-    self.greenCanvas.get_tk_widget().pack(side="right")  
+    greenChannel = self.histFigure.add_subplot(222)
+    greenChannel.plot(cv.calcHist([self.img],[1],None,[256],[0,256]), color = "green")
+    greenChannel.title.set_text("Green Channel")
 
     # Blue Channel Histogram
-    self.blueFigure.add_subplot(111).plot(cv.calcHist([self.img],[2],None,[256],[0,256]), color = "blue")
-    self.blueFigure.suptitle("Blue Channel")
-    self.blueCanvas = FigureCanvasTkAgg(self.blueFigure, self.root)
-    self.blueCanvas.get_tk_widget().pack(side="right")
+    blueChannel = self.histFigure.add_subplot(223)
+    blueChannel.plot(cv.calcHist([self.img],[2],None,[256],[0,256]), color = "blue")
+    blueChannel.title.set_text("Blue Channel")
+
+    # Assign figure to canvas to show in main window
+    self.histFigure.suptitle("Image Histogram")
+    self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
+    self.histCanvas.get_tk_widget().pack(side="right")  
 
     self.toHistMode()
 
