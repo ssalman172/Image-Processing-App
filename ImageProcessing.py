@@ -6,6 +6,7 @@ from PIL import ImageTk, Image
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.measure import block_reduce
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 plt.rcParams.update({'font.size': 5.5})
@@ -15,6 +16,7 @@ class Main:
     self.root = root
     self.baseImg = None
     self.img = np.zeros([])
+    self.oriImg = np.zeros([])
 
     # Image mode = 0, Histogram mode = 1
     self.viewMode = 0
@@ -30,19 +32,19 @@ class Main:
     self.root.option_add('*tearOff', FALSE)
 
     # Set up panels to show the image
-    self.imgPanelSize = [self.screenWidth/1.2, self.screenHeight/1.2]
-    self.imgPanelSizeHist = [self.screenWidth/2, self.screenHeight/2]
+    self.imgPanelSize = [self.screenWidth//1.2, self.screenHeight//1.2]
+    self.imgPanelSizeHist = [self.screenWidth//2, self.screenHeight//2]
 
-    self.panelLeft = tk.Label(self.root)
-    self.panelLeft.pack(side="left", padx=85, pady=10)
+    self.panelLeft = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.2), relief="ridge")
+    self.panelLeft.grid(row=1, column=0, ipadx=20, ipady=20)
 
-    self.panelRight = tk.Label(self.root)
-    self.panelRight.pack(side="right", padx=85, pady=10)
+    self.panelRight = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.2), relief="ridge")
+    self.panelRight.grid(row=1, column=1, ipadx=20, ipady=20)
 
     # Initialize View Mode Information
-    self.currentMode = Label(self.root, text = "Standard Image Mode")
+    self.currentMode = tk.Label(self.root, text = "Standard Image Mode")
     self.currentMode.config(font =("Courier", 14))
-    self.currentMode.pack()
+    self.currentMode.grid(row=0, column=0, columnspan=2)
 
     # Initialize Histogram Figures
     self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
@@ -55,7 +57,7 @@ class Main:
     self.fileMenu = Menu(self.menubar)
     self.menubar.add_cascade(label="File", menu=self.fileMenu)
     self.fileMenu.add_command(label="Select Image", command=self.selectImage)
-    self.fileMenu.add_command(label="Clear Result", command=self.clearRightPanel)
+    self.fileMenu.add_command(label="Clear Effect", command=self.clearEffect)
     self.fileMenu.add_separator()
     self.fileMenu.add_command(label="Exit", command=self.root.quit)
 
@@ -116,10 +118,11 @@ class Main:
   def selectImage(self):
     self.clearLeftPanel()
     self.clearRightPanel()
-    self.unpackHistogramCanvas()
+    self.clearHistogramCanvas()
     
-    filename =  filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
+    filename = filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
     self.img = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
+    self.oriImg = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
     image = Image.fromarray(self.img)
     self.baseImg = Image.open(filename)
     self.setSize(image)
@@ -127,15 +130,33 @@ class Main:
 
     if(self.viewMode==0):
       self.showLeftPanel(image_tk)
+      self.showRightPanel(image_tk)
     elif(self.viewMode==1):
       self.clearLeftPanel()
       self.showLeftPanel(image_tk)
       self.showHistogramCanvas()
     self.is_firstImg = FALSE
 
+  # Reset effect
+  def clearEffect(self):
+    # self.handleGray(self.img)
+    self.img = self.oriImg
+    img = Image.fromarray(self.img)
+    self.setSize(img)
+    img = ImageTk.PhotoImage(img)
+    self.clearLeftPanel()
+    self.clearRightPanel()
+    self.showLeftPanel(img)
+    self.showRightPanel(img)
+    self.clearHistogramCanvas()
+
   # Handle Display Image
   def showImage(self, img):
     if(self.viewMode==0):
+      oriImg = Image.fromarray(self.oriImg)
+      self.setSize(oriImg)
+      oriImg = ImageTk.PhotoImage(oriImg)
+      self.showLeftPanel(oriImg)
       self.showRightPanel(img)
     elif(self.viewMode==1):
       self.clearLeftPanel()
@@ -144,10 +165,7 @@ class Main:
   
   # Handle thumbnail size
   def setSize(self, img):
-    if(self.viewMode==0):
-      img.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
-    elif(self.viewMode==1):
-      img.thumbnail(self.imgPanelSizeHist, Image.ANTIALIAS)
+    img.thumbnail(self.imgPanelSize, Image.ANTIALIAS)
 
   def handleGray(self, img):
     if(self.is_grayscale == TRUE):
@@ -191,31 +209,45 @@ class Main:
   def clearRightPanel(self):
     self.panelRight.configure(image='')
   
-  def unpackHistogramCanvas(self):
-    self.histCanvas.get_tk_widget().pack_forget()
+  def clearHistogramCanvas(self):
+    self.histCanvas.get_tk_widget().grid_remove()
 
   # Handle view mode changes
+  def refreshImg(self):
+    img = Image.fromarray(self.img)
+    self.setSize(img)
+    img = ImageTk.PhotoImage(img)
+    self.showImage(img)
+
   def toImgMode(self):
     self.viewMode = 0
     self.showCurrentModeText()
-    self.unpackHistogramCanvas()
+    self.clearHistogramCanvas()
+    self.panelRight.grid(row=1, column=1, ipadx=20, ipady=20)
+
+    self.refreshImg()
 
   def toHistMode(self):
     self.viewMode = 1
     self.showCurrentModeText()
+    self.clearRightPanel()
+    self.showHistogramCanvas()
+
+    self.refreshImg()
 
   def showCurrentModeText(self):
     if(self.currentMode != NULL):
       self.currentMode.destroy()
 
     if (self.viewMode == 0):
-      self.currentMode = Label(self.root, text = "Standard Image Mode")
+      self.currentMode = tk.Label(self.root, text = "Standard Image Mode")
       self.currentMode.config(font =("Courier", 14))
+      self.currentMode.grid(row=0, column=0, columnspan=2)
     elif (self.viewMode == 1):
-      self.currentMode = Label(self.root, text = "Image Histogram Mode")
+      self.currentMode = tk.Label(self.root, text = "Image Histogram Mode")
       self.currentMode.config(font =("Courier", 14))
+      self.currentMode.grid(row=0, column=0, columnspan=2)
 
-    self.currentMode.pack()
 
   ################# Image Processing Operations #################
   def increaseColorValue(self, color, value=50):
@@ -246,8 +278,8 @@ class Main:
     self.clearRightPanel()
 
     imgScale = scalePercent
-    imgHeight = int(self.baseImg.size[0] * (imgScale / 100))
-    imgWidth = int(self.baseImg.size[1] * (imgScale / 100))
+    imgHeight = int(self.screenWidth//1.2 * (imgScale / 100))
+    imgWidth = int(self.screenHeight//1.2 * (imgScale / 100))
     dimension = (imgWidth, imgHeight)
 
     resizedImg = cv.resize(self.img, dimension, interpolation = cv.INTER_LINEAR)
@@ -259,8 +291,7 @@ class Main:
     self.showImage(resizedImg)
 
   def grayImage(self):
-    self.clearRightPanel()
-
+    self.clearRightPanel()    
     grayedImg = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
     
     grayedImg = Image.fromarray(grayedImg)
@@ -273,13 +304,17 @@ class Main:
 
   def downSampling(self):
     self.clearRightPanel()
-    downSampledImg = cv.pyrDown(self.img)
+    downsample = 4
+    # first, change to 0-1
+    r = block_reduce(self.img[:, :, 0], (downsample, downsample), np.mean)
+    g = block_reduce(self.img[:, :, 1], (downsample, downsample), np.mean)
+    b = block_reduce(self.img[:, :, 2], (downsample, downsample), np.mean)
+    downSampledImg = np.stack((r, g, b), axis=-1)
     
-    downSampledImg = Image.fromarray(downSampledImg)
+    downSampledImg = Image.fromarray(downSampledImg.astype(np.uint8))
     self.img = np.array(downSampledImg)
     self.setSize(downSampledImg)
     image_tk = ImageTk.PhotoImage(downSampledImg)
-
     self.showImage(image_tk)
 
   def quantization(self):
@@ -425,32 +460,37 @@ class Main:
 
   ################# Image Histogram #################
   def showHistogramCanvas(self):
-    self.clearRightPanel()
-    self.unpackHistogramCanvas()
+    self.panelRight.grid_remove()
+    self.clearHistogramCanvas()
 
     self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
     
-    # Red Channel Histogram
-    redChannel = self.histFigure.add_subplot(221)
-    redChannel.plot(cv.calcHist([self.img],[0],None,[256],[0,256]), color = "red")
-    redChannel.title.set_text("Red Channel")
+    if(self.is_grayscale == FALSE):
+      # Red Channel Histogram
+      redChannel = self.histFigure.add_subplot(221)
+      redChannel.plot(cv.calcHist([self.img],[0],None,[256],[0,256]), color = "red")
+      redChannel.title.set_text("Red Channel")
 
-    # Green Channel Histogram
-    greenChannel = self.histFigure.add_subplot(222)
-    greenChannel.plot(cv.calcHist([self.img],[1],None,[256],[0,256]), color = "green")
-    greenChannel.title.set_text("Green Channel")
+      # Green Channel Histogram
+      greenChannel = self.histFigure.add_subplot(222)
+      greenChannel.plot(cv.calcHist([self.img],[1],None,[256],[0,256]), color = "green")
+      greenChannel.title.set_text("Green Channel")
 
-    # Blue Channel Histogram
-    blueChannel = self.histFigure.add_subplot(223)
-    blueChannel.plot(cv.calcHist([self.img],[2],None,[256],[0,256]), color = "blue")
-    blueChannel.title.set_text("Blue Channel")
+      # Blue Channel Histogram
+      blueChannel = self.histFigure.add_subplot(223)
+      blueChannel.plot(cv.calcHist([self.img],[2],None,[256],[0,256]), color = "blue")
+      blueChannel.title.set_text("Blue Channel")
 
-    # Assign figure to canvas to show in main window
-    self.histFigure.suptitle("Image Histogram")
-    self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
-    self.histCanvas.get_tk_widget().pack(side="right")  
-
-    self.toHistMode()
+      # Assign figure to canvas to show in main window
+      self.histFigure.suptitle("Image Histogram")
+      self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
+      self.histCanvas.get_tk_widget().grid(row=1, column=1)
+    else:
+      grayHist = self.histFigure.add_subplot(111)
+      grayHist.plot(cv.calcHist([self.img], [0], None, [256], [0, 256]), color = "gray")
+      self.histFigure.suptitle("Gray Image Histogram")
+      self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
+      self.histCanvas.get_tk_widget().grid(row=1, column=1)
 
   def donothing():
     pass
