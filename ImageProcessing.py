@@ -6,7 +6,7 @@ from PIL import ImageTk, Image
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
-from skimage.measure import block_reduce
+from skimage import exposure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 plt.rcParams.update({'font.size': 5.5})
@@ -17,6 +17,7 @@ class Main:
     self.baseImg = None
     self.img = np.zeros([])
     self.oriImg = np.zeros([])
+    self.saveImg = np.zeros([])
 
     # Image mode = 0, Histogram mode = 1
     self.viewMode = 0
@@ -35,11 +36,19 @@ class Main:
     self.imgPanelSize = [self.screenWidth//1.2, self.screenHeight//1.2]
     self.imgPanelSizeHist = [self.screenWidth//2, self.screenHeight//2]
 
-    self.panelLeft = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.2), relief="ridge")
+    self.panelLeft = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.6), relief="ridge")
     self.panelLeft.grid(row=1, column=0, ipadx=20, ipady=20)
 
-    self.panelRight = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.2), relief="ridge")
+    self.panelRight = tk.Label(self.root, width=int(self.screenWidth//2.15), height=int(self.screenHeight//1.6), relief="ridge")
     self.panelRight.grid(row=1, column=1, ipadx=20, ipady=20)
+
+    # Scalebar Variables
+    self.redScale = DoubleVar()
+    self.redScale.set(120)
+    self.greenScale = DoubleVar()
+    self.greenScale.set(120)
+    self.blueScale = DoubleVar()
+    self.blueScale.set(120)
 
     # Initialize View Mode Information
     self.currentMode = tk.Label(self.root, text = "Standard Image Mode")
@@ -47,7 +56,7 @@ class Main:
     self.currentMode.grid(row=0, column=0, columnspan=2)
 
     # Initialize Histogram Figures
-    self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
+    self.histFigure = plt.Figure(figsize=(5.2,5.2), dpi=100)
     self.histCanvas = FigureCanvasTkAgg(self.histFigure, self.root)
 
     # Set up needed action menus
@@ -57,7 +66,7 @@ class Main:
     self.fileMenu = Menu(self.menubar)
     self.menubar.add_cascade(label="File", menu=self.fileMenu)
     self.fileMenu.add_command(label="Select Image", command=self.selectImage)
-    self.fileMenu.add_command(label="Clear Effect", command=self.clearEffect)
+    self.fileMenu.add_command(label="Save Image", command=self.saveImage)
     self.fileMenu.add_separator()
     self.fileMenu.add_command(label="Exit", command=self.root.quit)
 
@@ -85,24 +94,11 @@ class Main:
     self.scaleMenu.add_command(label="Scaling 2x", command=lambda: self.scaleImage(200))
     self.scaleMenu.add_command(label="Scaling 1/2x", command=lambda: self.scaleImage(50))
 
-    self.editMenu.add_command(label="Gray Scaling", command=self.grayImage)
-    self.editMenu.add_command(label="Down Sampling", command=self.downSampling)
-    self.editMenu.add_command(label="Quantization", command=self.quantization)
-    self.editMenu.add_command(label="Negative Color", command=self.createKlise)
-
     # Modify Intensity
     self.intensityMenu = Menu(self.editMenu)
     self.editMenu.add_cascade(label="Image Intensity", menu=self.intensityMenu)
     self.intensityMenu.add_command(label="Increase", command=lambda: self.modifyIntensity(70))
     self.intensityMenu.add_command(label="Decrease", command=lambda: self.modifyIntensity(-70))
-
-    ############################# HISTOGRAM MENUS #############################
-    self.histMenu = Menu(self.menubar)
-    self.menubar.add_cascade(label="Histogram & Filter", menu=self.histMenu)
-    self.histMenu.add_command(label="Histogram Equalization", command=self.histEqualization)
-    self.histMenu.add_command(label="Low Pass Filter", command=self.lowPassFilter)
-    self.histMenu.add_command(label="High Pass Filter", command=self.highPassFilter)
-    self.histMenu.add_command(label="Band Pass Filter", command=self.bandPassFilter)
 
     ############################# VIEW MODE MENUS #############################
     self.viewMenu = Menu(self.menubar)
@@ -110,7 +106,7 @@ class Main:
     self.viewMenu.add_command(label="Standard Image", command=self.toImgMode)
     self.viewMenu.add_command(label="Image Histogram", command=self.toHistMode)    
 
-    # self.showBottomPanel()
+    self.showBottomPanel()
     self.root.config(menu=self.menubar)
     self.root.mainloop()
 
@@ -121,10 +117,13 @@ class Main:
     self.clearHistogramCanvas()
     
     filename = filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
+    if not filename:
+        return
     self.img = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
     self.oriImg = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
     image = Image.fromarray(self.img)
     self.baseImg = Image.open(filename)
+
     self.setSize(image)
     image_tk = ImageTk.PhotoImage(image)
 
@@ -136,10 +135,23 @@ class Main:
       self.showLeftPanel(image_tk)
       self.showHistogramCanvas()
     self.is_firstImg = FALSE
+    self.redScale.set(120)
+    self.greenScale.set(120)
+    self.blueScale.set(120)
+
+  def saveImage(self):
+    filename = filedialog.asksaveasfile(mode='w', defaultextension=".jpg", filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
+    if not filename:
+        return
+    self.saveImg.save(filename)
+  
+  def setImgArray(self, img):
+    self.saveImg = img
+    self.img = np.array(img)
 
   # Reset effect
   def clearEffect(self):
-    # self.handleGray(self.img)
+    self.handleGray(self.img)
     self.img = self.oriImg
     img = Image.fromarray(self.img)
     self.setSize(img)
@@ -147,8 +159,14 @@ class Main:
     self.clearLeftPanel()
     self.clearRightPanel()
     self.showLeftPanel(img)
-    self.showRightPanel(img)
     self.clearHistogramCanvas()
+    if(self.viewMode==0):
+      self.showRightPanel(img)
+    else:
+      self.showHistogramCanvas()
+    self.redScale.set(120)
+    self.greenScale.set(120)
+    self.blueScale.set(120)
 
   # Handle Display Image
   def showImage(self, img):
@@ -182,26 +200,81 @@ class Main:
     self.panelRight.image = img
 
   def showBottomPanel(self):
+    self.showButtonPanel()
+    self.showColorPanel()
+
+  def showButtonPanel(self):
+    buttonFrame = tk.Frame(self.root)
+    buttonFrame.grid(row=2, column=0)
+
+    clearEffBtn = tk.Button(buttonFrame, text="Clear Effect", command=self.clearEffect)
+    clearEffBtn.grid(row=0, column=0, sticky="ewns", rowspan=3, padx=(0,15))
+
+    grayBtn = tk.Button(buttonFrame, text="Gray Scaling", command=self.grayImage)
+    grayBtn.grid(row=0, column=1, sticky="ew")
+
+    samplingBtn = tk.Button(buttonFrame, text="Down Sampling", command=self.downSampling)
+    samplingBtn.grid(row=0, column=2, sticky="ew")
+
+    quantizeBtn = tk.Button(buttonFrame, text="Image Quantization", command=self.quantization)
+    quantizeBtn.grid(row=2, column=1, sticky="ew")
+
+    kliseBtn = tk.Button(buttonFrame, text="Negative Image", command=self.createKlise)
+    kliseBtn.grid(row=2, column=2, sticky="ew")
+
+    lowpassBtn = tk.Button(buttonFrame, text="Lowpass Filter", command=self.lowPassFilter)
+    lowpassBtn.grid(row=0, column=3, sticky="ew", padx=(15,0))
+
+    highpassBtn = tk.Button(buttonFrame, text="Highpass Filter", command=self.highPassFilter)
+    highpassBtn.grid(row=1, column=3, sticky="ew", padx=(15,0))
+
+    bandpassBtn = tk.Button(buttonFrame, text="Bandpass Filter", command=self.bandPassFilter)
+    bandpassBtn.grid(row=2, column=3, sticky="ew", padx=(15,0))
+
+    histSqualizationBtn = tk.Button(buttonFrame, text="Histogram Equalization", command=self.histEqualization)
+    histSqualizationBtn.grid(row=0, column=4, sticky="ewns", rowspan=3)
+
+    histSpecificationBtn = tk.Button(buttonFrame, text="Histogram Specification", command=self.histSpecification)
+    histSpecificationBtn.grid(row=0, column=5, sticky="ewns", rowspan=3)
+
+  def showColorPanel(self):
+    colorFrame = tk.Frame(self.root)
+    colorFrame.grid(row=2, column=1)
     # RED CHANNEL
-    scaleBar = Scale(self.root, from_=0, to=255, length=700, orient=HORIZONTAL)
-    scaleBar.pack(side="bottom", pady=(0,10))
-    barTitle = Label(self.root, text = "Red Channel")
+    redFrame = tk.Frame(colorFrame)
+    redFrame.grid(row=0, column=0)
+    barTitle = Label(redFrame, text = "RED")
     barTitle.config(font =("Courier", 11))
-    barTitle.pack(side="bottom", pady=(0,0))
+    barTitle.grid(row=0, column=0)
+    scaleBar = Scale(redFrame, from_=0, to=255, length=500, orient=HORIZONTAL, command=self.modifyRedChannel, variable=self.redScale)
+    scaleBar.grid(row=0, column=1)
 
     # GREEN CHANNEL
-    scaleBar = Scale(self.root, from_=0, to=255, length=700, orient=HORIZONTAL)
-    scaleBar.pack(side="bottom", pady=(0,10))
-    barTitle = Label(self.root, text = "Green Channel")
+    greenFrame = tk.Frame(colorFrame)
+    greenFrame.grid(row=1, column=0)
+    barTitle = Label(greenFrame, text = "GREEN")
     barTitle.config(font =("Courier", 11))
-    barTitle.pack(side="bottom", pady=(0,0))
+    barTitle.grid(row=0, column=0)
+    scaleBar = Scale(greenFrame, from_=0, to=255, length=500, orient=HORIZONTAL, command=self.modifyGreenChannel, variable=self.greenScale)
+    scaleBar.grid(row=0, column=1)
 
     # BLUE CHANNEL
-    scaleBar = Scale(self.root, from_=0, to=255, length=700, orient=HORIZONTAL)
-    scaleBar.pack(side="bottom", pady=(0,10))
-    barTitle = Label(self.root, text = "Blue Channel")
+    blueFrame = tk.Frame(colorFrame)
+    blueFrame.grid(row=2, column=0)
+    barTitle = Label(blueFrame, text = "BLUE")
     barTitle.config(font =("Courier", 11))
-    barTitle.pack(side="bottom", pady=(0,0))
+    barTitle.grid(row=0, column=0)
+    scaleBar = Scale(blueFrame, from_=0, to=255, length=500, orient=HORIZONTAL, command=self.modifyBlueChannel, variable=self.blueScale)
+    scaleBar.grid(row=0, column=1)
+
+    # INTENSITY
+    intensityFrame = tk.Frame(colorFrame)
+    intensityFrame.grid(row=3, column=0)
+    barTitle = Label(intensityFrame, text = "INTENSITY")
+    barTitle.config(font =("Courier", 11))
+    barTitle.grid(row=0, column=0)
+    scaleBar = Scale(intensityFrame, from_=-30, to=30, length=500, orient=HORIZONTAL, command=self.modifyIntensity)
+    scaleBar.grid(row=0, column=1)    
 
   def clearLeftPanel(self):
     self.panelLeft.configure(image='')
@@ -250,13 +323,56 @@ class Main:
 
 
   ################# Image Processing Operations #################
+  def modifyRedChannel(self, val):
+    self.clearRightPanel()
+    self.handleGray(self.img)
+    value = int(val)
+
+    self.img[:,:,0] = value
+
+    modifiedRed = Image.fromarray(self.img)
+    self.setImgArray(modifiedRed)
+    self.setSize(modifiedRed)    
+    image_tk = ImageTk.PhotoImage(modifiedRed)
+
+    self.showImage(image_tk)
+
+  def modifyGreenChannel(self, val):
+    self.clearRightPanel()
+    self.handleGray(self.img)
+    value = int(val)
+
+    self.img[:,:,1] = value
+
+    modifiedGreen = Image.fromarray(self.img)
+    self.setImgArray(modifiedGreen)
+    self.setSize(modifiedGreen)    
+    image_tk = ImageTk.PhotoImage(modifiedGreen)
+
+    self.showImage(image_tk)
+
+  def modifyBlueChannel(self, val):
+    self.clearRightPanel()
+    self.handleGray(self.img)
+    value = int(val)
+
+    self.img[:,:,2] = value
+    
+    modifiedBlue = Image.fromarray(self.img)
+    self.setImgArray(modifiedBlue)
+    self.setSize(modifiedBlue)    
+    image_tk = ImageTk.PhotoImage(modifiedBlue)
+
+    self.showImage(image_tk)
+
   def increaseColorValue(self, color, value=50):
     self.clearRightPanel()
     self.handleGray(self.img)
     lim = 255
 
-    self.img[:,:,color] = np.clip(self.img[:,:,color]+value, 0, lim)
+    self.img[:,:,color] = self.img[:,:,color] = np.clip(self.img[:,:,color]+value, 0, lim)
     increasedImg = Image.fromarray(self.img)
+    self.setImgArray(increasedImg)
     self.setSize(increasedImg)    
     image_tk = ImageTk.PhotoImage(increasedImg)
 
@@ -269,6 +385,7 @@ class Main:
     
     self.img[:,:,color] = np.clip(self.img[:,:,color]-value, lim, 255)
     decreasedImg = Image.fromarray(self.img)
+    self.setImgArray(decreasedImg)
     self.setSize(decreasedImg)
     image_tk = ImageTk.PhotoImage(decreasedImg)
 
@@ -291,11 +408,12 @@ class Main:
     self.showImage(resizedImg)
 
   def grayImage(self):
-    self.clearRightPanel()    
+    self.clearRightPanel()
+    self.handleGray(self.img)
     grayedImg = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
     
     grayedImg = Image.fromarray(grayedImg)
-    self.img = np.array(grayedImg)
+    self.setImgArray(grayedImg)
     self.setSize(grayedImg)
     image_tk = ImageTk.PhotoImage(grayedImg)
 
@@ -304,15 +422,33 @@ class Main:
 
   def downSampling(self):
     self.clearRightPanel()
-    downsample = 4
-    # first, change to 0-1
-    r = block_reduce(self.img[:, :, 0], (downsample, downsample), np.mean)
-    g = block_reduce(self.img[:, :, 1], (downsample, downsample), np.mean)
-    b = block_reduce(self.img[:, :, 2], (downsample, downsample), np.mean)
-    downSampledImg = np.stack((r, g, b), axis=-1)
-    
-    downSampledImg = Image.fromarray(downSampledImg.astype(np.uint8))
-    self.img = np.array(downSampledImg)
+    self.handleGray(self.img)
+    imgHeight = self.img.shape[0]
+    imgWidth = self.img.shape[1]
+    downsample = 64
+
+    numHeight, numWidth = imgHeight / downsample, imgWidth / downsample
+
+    for i in range(downsample):
+    #  Get Y coordinates
+      y = int(i * numHeight)
+      for j in range(downsample):
+          #  Get  X  coordinates 
+          x = int(j * numWidth)
+          #  Get fill color , Pixel dot in upper left corner 
+          r = self.img[y, x][0]
+          g = self.img[y, x][1]
+          b = self.img[y, x][2]
+
+          #  Loop setting small area sampling 
+          for n in range(int(numHeight)):
+              for m in range(int(numWidth)):
+                  self.img[y+n, x+m][0] = np.uint8(r)
+                  self.img[y+n, x+m][1] = np.uint8(g)
+                  self.img[y+n, x+m][2] = np.uint8(b)
+
+    downSampledImg = Image.fromarray(self.img)
+    self.setImgArray(downSampledImg)
     self.setSize(downSampledImg)
     image_tk = ImageTk.PhotoImage(downSampledImg)
     self.showImage(image_tk)
@@ -335,7 +471,7 @@ class Main:
               quantizationImg[i, j][k] = np.uint8(gray)
 
     quantizationImg = Image.fromarray(quantizationImg)
-    self.img = np.array(quantizationImg)
+    self.setImgArray(quantizationImg)
     self.setSize(quantizationImg)
     image_tk = ImageTk.PhotoImage(quantizationImg)
 
@@ -351,15 +487,16 @@ class Main:
     self.img[:,:,2] = 255 - self.img[:,:,2]
 
     negativeImg = Image.fromarray(self.img)
-    self.img = np.array(negativeImg)
+    self.setImgArray(negativeImg)
     self.setSize(negativeImg)
     image_tk = ImageTk.PhotoImage(negativeImg)
 
     self.showImage(image_tk)
 
-  def modifyIntensity(self, value):
+  def modifyIntensity(self, val):
     self.clearRightPanel()
     self.handleGray(self.img)
+    value = int(val)
 
     hsv = cv.cvtColor(self.img, cv.COLOR_RGB2HSV)
     h, s, v = cv.split(hsv)
@@ -378,7 +515,7 @@ class Main:
     self.img = cv.cvtColor(final_hsv, cv.COLOR_HSV2RGB)
 
     intensityImg = Image.fromarray(self.img)
-    self.img = np.array(intensityImg)
+    self.setImgArray(intensityImg)
     self.setSize(intensityImg)
     image_tk = ImageTk.PhotoImage(intensityImg)
 
@@ -395,9 +532,32 @@ class Main:
     equalizedImg = cv.merge(equalizedChannel)
 
     equalizedImg = Image.fromarray(equalizedImg)
-    self.img = np.array(equalizedImg)
+    self.setImgArray(equalizedImg)
     self.setSize(equalizedImg)
     image_tk = ImageTk.PhotoImage(equalizedImg)
+
+    self.showImage(image_tk)
+  
+  def histSpecification(self):
+    # load image reference
+    filename = filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
+    if not filename:
+        return
+    imgRef = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
+
+    # determine if we are performing multichannel histogram matching
+    # and then perform histogram matching itself
+    if(self.img.shape[-1] > 1):
+      multi = True
+    else:
+      multi = False
+
+    matchedImg = exposure.match_histograms(self.img, imgRef, multichannel=multi)
+
+    matchedImg = Image.fromarray(matchedImg)
+    self.setImgArray(matchedImg)
+    self.setSize(matchedImg)
+    image_tk = ImageTk.PhotoImage(matchedImg)
 
     self.showImage(image_tk)
     
@@ -412,7 +572,7 @@ class Main:
     lowpassImg = cv.filter2D(self.img, -1, kernel)
 
     lowpassImg = Image.fromarray(lowpassImg)
-    self.img = np.array(lowpassImg)
+    self.setImgArray(lowpassImg)
     self.setSize(lowpassImg)
     image_tk = ImageTk.PhotoImage(lowpassImg)
 
@@ -432,7 +592,7 @@ class Main:
     highpassImg = cv.filter2D(self.img, -1, kernel)
 
     highpassImg = Image.fromarray(highpassImg)
-    self.img = np.array(highpassImg)
+    self.setImgArray(highpassImg)
     self.setSize(highpassImg)
     image_tk = ImageTk.PhotoImage(highpassImg)
 
@@ -452,7 +612,7 @@ class Main:
     bandpassImg = cv.filter2D(self.img, -1, kernel)
 
     bandpassImg = Image.fromarray(bandpassImg)
-    self.img = np.array(bandpassImg)
+    self.setImgArray(bandpassImg)
     self.setSize(bandpassImg)
     image_tk = ImageTk.PhotoImage(bandpassImg)
 
@@ -463,7 +623,7 @@ class Main:
     self.panelRight.grid_remove()
     self.clearHistogramCanvas()
 
-    self.histFigure = plt.Figure(figsize=(6,6), dpi=100)
+    self.histFigure = plt.Figure(figsize=(5.2,5.2), dpi=100)
     
     if(self.is_grayscale == FALSE):
       # Red Channel Histogram
