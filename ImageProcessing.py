@@ -111,33 +111,33 @@ class Main:
     self.root.mainloop()
 
   # Handle image selection
-  def selectImage(self):
-    self.clearLeftPanel()
-    self.clearRightPanel()
-    self.clearHistogramCanvas()
-    
+  def selectImage(self):       
     filename = filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
     if not filename:
         return
-    self.img = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
-    self.oriImg = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
-    image = Image.fromarray(self.img)
-    self.baseImg = Image.open(filename)
-
-    self.setSize(image)
-    image_tk = ImageTk.PhotoImage(image)
-
-    if(self.viewMode==0):
-      self.showLeftPanel(image_tk)
-      self.showRightPanel(image_tk)
-    elif(self.viewMode==1):
+    else:
       self.clearLeftPanel()
-      self.showLeftPanel(image_tk)
-      self.showHistogramCanvas()
-    self.is_firstImg = FALSE
-    self.redScale.set(120)
-    self.greenScale.set(120)
-    self.blueScale.set(120)
+      self.clearRightPanel()
+      self.clearHistogramCanvas()
+      self.img = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
+      self.oriImg = cv.cvtColor(cv.imread(filename), cv.COLOR_BGR2RGB)
+      image = Image.fromarray(self.img)
+      self.baseImg = Image.open(filename)
+
+      self.setSize(image)
+      image_tk = ImageTk.PhotoImage(image)
+
+      if(self.viewMode==0):
+        self.showLeftPanel(image_tk)
+        self.showRightPanel(image_tk)
+      elif(self.viewMode==1):
+        self.clearLeftPanel()
+        self.showLeftPanel(image_tk)
+        self.showHistogramCanvas()
+      self.is_firstImg = FALSE
+      self.redScale.set(120)
+      self.greenScale.set(120)
+      self.blueScale.set(120)
 
   def saveImage(self):
     filename = filedialog.asksaveasfile(mode='w', defaultextension=".jpg", filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
@@ -523,6 +523,7 @@ class Main:
     
   def histEqualization(self):
     self.clearRightPanel()
+    self.handleGray(self.img)
 
     colorChannel = cv.split(self.img)
     equalizedChannel = []
@@ -539,6 +540,7 @@ class Main:
     self.showImage(image_tk)
   
   def histSpecification(self):
+    self.handleGray(self.img)
     # load image reference
     filename = filedialog.askopenfilename(filetypes=[("Image files", ".jpg .jpeg .jp2 .png .tiff .svg .gif .bmp")])
     if not filename:
